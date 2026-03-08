@@ -1,0 +1,31 @@
+Name,Age,Salary,Department,YearsExperience,Satisfaction,City
+Alice,29,55000,Engineering,5,4.2,New York
+Bob,34,72000,Engineering,10,3.8,San Francisco
+Charlie,25,48000,Marketing,2,4.5,Chicago
+Diana,41,95000,Engineering,18,3.1,San Francisco
+Eve,32,67000,Marketing,8,4.0,New York
+Frank,28,52000,Sales,3,3.5,Chicago
+Grace,37,88000,Engineering,14,4.7,San Francisco
+Hank,45,105000,Sales,22,2.8,New York
+Ivy,30,61000,Marketing,6,4.3,Chicago
+Jack,27,49000,Sales,4,3.9,San Francisco
+Kara,38,91000,Engineering,15,4.1,New York
+Leo,33,73000,Marketing,9,3.6,Chicago
+Mona,26,47000,Sales,2,4.4,San Francisco
+Nate,42,98000,Engineering,19,3.3,New York
+Olivia,31,64000,Marketing,7,4.6,Chicago
+Paul,36,85000,Sales,13,3.0,San Francisco
+Quinn,29,56000,Engineering,5,4.8,New York
+Rachel,44,102000,Sales,21,2.5,Chicago
+Sam,35,79000,Marketing,11,3.7,San Francisco
+Tina,24,45000,Sales,1,4.9,New York
+Uma,40,93000,Engineering,17,3.2,Chicago
+Vic,27,50000,Marketing,3,4.1,San Francisco
+Wendy,33,71000,Sales,9,3.4,New York
+Xander,39,89000,Engineering,16,4.0,Chicago
+Yuki,28,53000,Marketing,4,4.5,San Francisco
+Zara,46,110000,Sales,23,2.3,New York
+Aaron,31,63000,Engineering,7,4.2,Chicago
+Beth,35,,Marketing,11,,San Francisco
+Carl,29,55000,,5,3.9,
+Donna,43,99000,Sales,,2.7,New York
