@@ -24,8 +24,14 @@ env/
 Thumbs.db
 desktop.ini
 
-# Streamlit
+# Streamlit secrets
 .streamlit/secrets.toml
 
-# Environment
+# Environment & API keys
 .env
+.env.local
+.env.production
+*.key
+*.pem
+secrets.json
+credentials.json
