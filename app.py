@@ -5,27 +5,65 @@ import re
 import os
 
 # ─── System prompt: forces JSON-structured EDA output ───
-SYSTEM_PROMPT = """You are an expert data analyst. When given CSV data, perform a thorough Exploratory Data Analysis (EDA) and return your findings as a JSON object.
+SYSTEM_PROMPT = """You are an expert Amazon sales data analyst. When given CSV data, analyze it thoroughly and return your findings as a strictly structured JSON object.
 
-Your JSON response must follow this exact structure:
+Your JSON response must follow this EXACT structure:
+
 {
   "summary": {
     "totalRows": number,
     "totalColumns": number,
     "overview": "2-3 sentence plain-English overview of what this dataset contains"
   },
+
+  "summaryCards": [
+    { "metric": "Total Rows", "value": number },
+    { "metric": "Total Columns", "value": number },
+    { "metric": "Numeric Columns", "value": number },
+    { "metric": "Insights Found", "value": number }
+  ],
+
+  "topInsights": [
+    {
+      "number": 1,
+      "bold": "Short bold headline of the insight",
+      "detail": "Full sentence explanation with specific numbers and column names"
+    },
+    {
+      "number": 2,
+      "bold": "Short bold headline",
+      "detail": "Full sentence explanation"
+    },
+    {
+      "number": 3,
+      "bold": "Short bold headline",
+      "detail": "Full sentence explanation"
+    },
+    {
+      "number": 4,
+      "bold": "Short bold headline",
+      "detail": "Full sentence explanation"
+    },
+    {
+      "number": 5,
+      "bold": "Short bold headline",
+      "detail": "Full sentence explanation"
+    }
+  ],
+
   "columns": [
     {
-      "name": "column name",
+      "name": "exact column name from CSV",
       "type": "numeric|categorical|text|date",
       "nullCount": number,
       "uniqueCount": number,
-      "insight": "1 sentence insight about this column"
+      "insight": "One sentence describing what this column contains and its distribution"
     }
   ],
+
   "statistics": [
     {
-      "column": "column name (numeric columns only)",
+      "column": "numeric column name",
       "min": number,
       "max": number,
       "mean": number,
@@ -33,39 +71,62 @@ Your JSON response must follow this exact structure:
       "stdDev": number
     }
   ],
-  "topInsights": [
-    "Insight 1 as a clear, actionable sentence",
-    "Insight 2",
-    "Insight 3",
-    "Insight 4",
-    "Insight 5"
-  ],
+
   "categoryBreakdowns": [
     {
       "column": "categorical column name",
-      "values": [{"label": "value", "count": number}]
+      "values": [
+        { "label": "category value", "count": number }
+      ]
     }
   ],
-  "anomalies": ["Any anomaly or data quality issue found"],
-  "recommendations": ["Actionable recommendation 1", "Actionable recommendation 2", "Actionable recommendation 3"]
+
+  "anomalies": [
+    "Anomaly 1 described as a full sentence with specific numbers",
+    "Anomaly 2 described as a full sentence with specific numbers",
+    "Anomaly 3 described as a full sentence with specific numbers",
+    "Anomaly 4 described as a full sentence with specific numbers"
+  ],
+
+  "recommendations": [
+    {
+      "number": 1,
+      "bold": "Short action headline",
+      "detail": "Full sentence explaining what to do and why, referencing specific data findings"
+    },
+    {
+      "number": 2,
+      "bold": "Short action headline",
+      "detail": "Full sentence explanation"
+    },
+    {
+      "number": 3,
+      "bold": "Short action headline",
+      "detail": "Full sentence explanation"
+    }
+  ]
 }
 
-Rules:
-- Return ONLY valid JSON, no markdown, no backticks, no extra text
-- Analyze ALL columns thoroughly
-- For numeric columns always compute min, max, mean, median, stdDev
-- For categorical columns always compute categoryBreakdowns (top 5 values with counts)
-- topInsights must be the most valuable business or analytical findings
-- anomalies should flag nulls, outliers, duplicates, or suspicious patterns
-- recommendations must be specific and actionable based on the data"""
+STRICT RULES:
+- Return ONLY valid JSON — no markdown, no backticks, no extra text before or after
+- Analyze every single column in the CSV without skipping any
+- For every numeric column compute: min, max, mean, median, stdDev rounded to 2 decimal places
+- For every categorical column compute: top 5 values with exact counts in categoryBreakdowns
+- topInsights must reference specific column names, product names, and real numbers from the data
+- anomalies must flag: zero-value rows, missing data, outliers, duplicate patterns, suspicious distributions
+- recommendations must be specific and directly reference findings from the data — no generic advice
+- median and mean for sparse/zero-heavy columns should reflect the true distribution including zeros
+- All monetary values should include the currency symbol found in the data (e.g. ₹)"""
 
 
 # ─── LLM provider helpers ───
 def get_llm(provider: str, model: str, api_key: str = ""):
     """Return a LangChain LLM instance based on selected provider."""
     if provider == "Ollama (Local)":
-        from langchain_community.llms import Ollama
-        return Ollama(model=model)
+        from langchain_community.chat_models import ChatOllama
+        # Ensure model name matches what's pulled on the machine
+        m = model if ":" in model else f"{model}:latest"
+        return ChatOllama(model=m, temperature=0)
     elif provider == "Groq (Cloud – Free)":
         from langchain_groq import ChatGroq
         return ChatGroq(model_name=model, groq_api_key=api_key, temperature=0)
@@ -73,13 +134,18 @@ def get_llm(provider: str, model: str, api_key: str = ""):
         raise ValueError(f"Unknown provider: {provider}")
 
 
-def invoke_llm(llm, prompt: str, provider: str) -> str:
-    """Invoke the LLM and return text, handling both LLM and ChatModel."""
-    if provider == "Groq (Cloud – Free)":
-        response = llm.invoke(prompt)
-        return response.content if hasattr(response, "content") else str(response)
-    else:
-        return llm.invoke(prompt)
+def invoke_llm(llm, prompt: str, system_prompt: str, provider: str) -> str:
+    """Invoke the LLM with system context and return text contents."""
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    # All our models are now used as ChatModels for better prompt following
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=prompt)
+    ]
+    
+    response = llm.invoke(messages)
+    return response.content if hasattr(response, "content") else str(response)
 
 
 # ─── Page config ───
@@ -230,37 +296,24 @@ with st.sidebar:
     st.markdown("## 🗂️ Data Upload")
     uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 
-    st.markdown("---")
-    st.markdown("### ⚙️ AI Provider")
 
-    provider = st.radio(
-        "Choose backend",
-        ["Ollama (Local)", "Groq (Cloud – Free)"],
-        index=0,
-        help="Ollama runs on your machine. Groq is a free cloud API — get a key at console.groq.com",
-    )
+    # ─── LLM Config (Background) ───
+    # Auto-detect Groq key, otherwise default to Ollama
+    api_key = ""
+    try:
+        api_key = st.secrets.get("GROQ_API_KEY", "")
+    except Exception:
+        pass
+    if not api_key:
+        api_key = os.environ.get("GROQ_API_KEY", "")
 
-    if provider == "Ollama (Local)":
-        model_name = st.selectbox("Ollama model", ["llama3", "mistral", "phi3", "qwen2.5-coder:7b"], index=0)
-        api_key = ""
+    if api_key:
+        provider = "Groq (Cloud – Free)"
+        model_name = "llama-3.3-70b-versatile"
     else:
-        model_name = st.selectbox("Groq model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"], index=0)
-        # Try Streamlit secrets first (for deployed app), then text input
-        default_key = ""
-        try:
-            default_key = st.secrets.get("GROQ_API_KEY", "")
-        except Exception:
-            default_key = os.environ.get("GROQ_API_KEY", "")
-        api_key = st.text_input("Groq API Key", value=default_key, type="password",
-                                help="Free at https://console.groq.com/keys")
+        provider = "Ollama (Local)"
+        model_name = "llama3:latest"
 
-    st.markdown("---")
-    st.markdown(
-        "<div style='text-align:center;color:#94a3b8;font-size:0.78rem;margin-top:1rem;'>"
-        "Powered by Ollama / Groq<br>Your data stays private"
-        "</div>",
-        unsafe_allow_html=True,
-    )
 
 
 # ─── Helper: Try to parse JSON from LLM response ───
@@ -316,7 +369,7 @@ if uploaded_file is not None:
     # ── Run analysis ──
     can_run = True
     if provider == "Groq (Cloud – Free)" and not api_key:
-        st.warning("⚠️ Please enter your Groq API key in the sidebar to continue.")
+        st.warning("⚠️ Groq API key not found in backend configuration. Please add it to `.streamlit/secrets.toml`.")
         can_run = False
 
     if can_run and st.button("🚀  Analyze Dataset", use_container_width=True):
@@ -330,11 +383,28 @@ if uploaded_file is not None:
 
         with st.spinner("🔍 Analyzing your data with AI…"):
             try:
+                # Attempt primary provider
                 llm = get_llm(provider, model_name, api_key)
-                raw_response = invoke_llm(llm, full_prompt, provider)
+                raw_response = invoke_llm(llm, user_prompt, SYSTEM_PROMPT, provider)
             except Exception as e:
-                st.error(f"❌ LLM error: {e}")
-                raw_response = None
+                error_msg = str(e)
+                # Fallback if Groq key is invalid
+                if provider == "Groq (Cloud – Free)" and ("401" in error_msg or "invalid_api_key" in error_msg.lower()):
+                    st.warning("⚠️ Groq API key is invalid or expired. Falling back to local Ollama...")
+                    try:
+                        fallback_provider = "Ollama (Local)"
+                        fallback_model = "llama3:latest"
+                        llm = get_llm(fallback_provider, fallback_model, "")
+                        raw_response = invoke_llm(llm, user_prompt, SYSTEM_PROMPT, fallback_provider)
+                    except Exception as e_fallback:
+                        st.error(f"❌ Both Groq and Ollama fallback failed. Error: {e_fallback}")
+                        raw_response = None
+                else:
+                    # Specific hint for Ollama local errors
+                    if "connection" in error_msg.lower() and provider == "Ollama (Local)":
+                        error_msg += "\n\n💡 TIP: Make sure Ollama is open and running on your taskbar!"
+                    st.error(f"❌ LLM error: {error_msg}")
+                    raw_response = None
 
         if raw_response:
             result = parse_llm_json(raw_response)
@@ -349,27 +419,48 @@ if uploaded_file is not None:
     if "eda_result" in st.session_state:
         result = st.session_state["eda_result"]
 
-        # ── Summary ──
+        # ── Summary & Metrics ──
         summary = result.get("summary", {})
-        if summary:
+        if summary or result.get("summaryCards"):
             section("🔎", "Dataset Summary")
-            c1, c2, c3 = st.columns(3)
-            with c1:
+            
+            # Priority 1: Use summaryCards if provided
+            summary_cards = result.get("summaryCards", [])
+            if summary_cards:
+                cols = st.columns(len(summary_cards))
+                for idx, card in enumerate(summary_cards):
+                    metric = card.get("metric", "Metric")
+                    val = card.get("value", "—")
+                    # Format numbers with commas if they are numeric
+                    if isinstance(val, (int, float)):
+                        val_str = f"{val:,}" if val >= 1000 else str(val)
+                    else:
+                        val_str = str(val)
+                    with cols[idx]:
+                        st.markdown(
+                            f'<div class="metric-card"><div class="metric-value">{val_str}</div>'
+                            f'<div class="metric-label">{metric}</div></div>', unsafe_allow_html=True)
+            else:
+                # Fallback for old structure
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown(
+                        f'<div class="metric-card"><div class="metric-value">{summary.get("totalRows", "—"):,}</div>'
+                        f'<div class="metric-label">Total Rows</div></div>', unsafe_allow_html=True)
+                with c2:
+                    st.markdown(
+                        f'<div class="metric-card"><div class="metric-value">{summary.get("totalColumns", "—")}</div>'
+                        f'<div class="metric-label">Total Columns</div></div>', unsafe_allow_html=True)
+                with c3:
+                    total_nulls = sum(c.get("nullCount", 0) for c in result.get("columns", []))
+                    st.markdown(
+                        f'<div class="metric-card"><div class="metric-value">{total_nulls}</div>'
+                        f'<div class="metric-label">Total Nulls</div></div>', unsafe_allow_html=True)
+            
+            if summary.get('overview'):
                 st.markdown(
-                    f'<div class="metric-card"><div class="metric-value">{summary.get("totalRows", "—"):,}</div>'
-                    f'<div class="metric-label">Total Rows</div></div>', unsafe_allow_html=True)
-            with c2:
-                st.markdown(
-                    f'<div class="metric-card"><div class="metric-value">{summary.get("totalColumns", "—")}</div>'
-                    f'<div class="metric-label">Total Columns</div></div>', unsafe_allow_html=True)
-            with c3:
-                total_nulls = sum(c.get("nullCount", 0) for c in result.get("columns", []))
-                st.markdown(
-                    f'<div class="metric-card"><div class="metric-value">{total_nulls}</div>'
-                    f'<div class="metric-label">Total Nulls</div></div>', unsafe_allow_html=True)
-            st.markdown(
-                f"<p style='color:#475569;font-size:0.95rem;margin-top:1rem;line-height:1.7;'>"
-                f"{summary.get('overview', '')}</p>", unsafe_allow_html=True)
+                    f"<p style='color:#475569;font-size:0.95rem;margin-top:1rem;line-height:1.7;'>"
+                    f"{summary.get('overview', '')}</p>", unsafe_allow_html=True)
 
         # ── Column Analysis ──
         columns_data = result.get("columns", [])
@@ -420,9 +511,16 @@ if uploaded_file is not None:
         if insights:
             section("💡", "Top Insights")
             for i, insight in enumerate(insights, 1):
-                st.markdown(
-                    f'<div class="insight-card"><strong>#{i}</strong> &nbsp; {insight}</div>',
-                    unsafe_allow_html=True)
+                if isinstance(insight, dict):
+                    bold = insight.get("bold", "")
+                    detail = insight.get("detail", "")
+                    st.markdown(
+                        f'<div class="insight-card"><strong>#{i} {bold}</strong><br>{detail}</div>',
+                        unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        f'<div class="insight-card"><strong>#{i}</strong> &nbsp; {insight}</div>',
+                        unsafe_allow_html=True)
 
         # ── Category Breakdowns ──
         cats = result.get("categoryBreakdowns", [])
@@ -456,8 +554,15 @@ if uploaded_file is not None:
         recs = result.get("recommendations", [])
         if recs:
             section("✅", "Recommendations")
-            for r in recs:
-                st.markdown(f'<div class="rec-card">→ {r}</div>', unsafe_allow_html=True)
+            for i, r in enumerate(recs, 1):
+                if isinstance(r, dict):
+                    bold = r.get("bold", "")
+                    detail = r.get("detail", "")
+                    st.markdown(
+                        f'<div class="rec-card"><strong>{i}. {bold}</strong><br>{detail}</div>',
+                        unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="rec-card">→ {r}</div>', unsafe_allow_html=True)
 
         # ── Raw JSON ──
         st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
