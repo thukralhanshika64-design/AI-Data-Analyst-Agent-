@@ -1,0 +1,6 @@
+__pycache__/
+.venv/
+.streamlit/
+*.pyc
+.env
+video_summary.md
