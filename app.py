@@ -298,21 +298,34 @@ with st.sidebar:
 
 
     # ─── LLM Config (Background) ───
-    # Auto-detect Groq key, otherwise default to Ollama
-    api_key = ""
+    st.markdown("---")
+    st.markdown("### ⚙️ AI Settings")
+    
+    # Auto-detect Groq key from secrets/env
+    found_api_key = ""
     try:
-        api_key = st.secrets.get("GROQ_API_KEY", "")
+        found_api_key = st.secrets.get("GROQ_API_KEY", "")
     except Exception:
         pass
-    if not api_key:
-        api_key = os.environ.get("GROQ_API_KEY", "")
+    if not found_api_key:
+        found_api_key = os.environ.get("GROQ_API_KEY", "")
+
+    # Always provide an input field for flexibility
+    api_key = st.text_input(
+        "Groq API Key", 
+        value=found_api_key, 
+        type="password",
+        help="Paste your 'gsk_...' key here to use Cloud AI (fast). Leave empty to use Local AI (slow)."
+    )
 
     if api_key:
         provider = "Groq (Cloud – Free)"
         model_name = "llama-3.3-70b-versatile"
+        st.success("✅ Cloud Mode Active")
     else:
         provider = "Ollama (Local)"
         model_name = "llama3:latest"
+        st.info("🏠 Local Mode Active")
 
 
 
