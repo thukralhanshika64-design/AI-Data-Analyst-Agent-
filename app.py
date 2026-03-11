@@ -302,26 +302,32 @@ with st.sidebar:
     st.markdown("### ⚙️ AI Settings")
     
     # Auto-detect Groq key from secrets/env
-    found_api_key = ""
+    backend_key = ""
     try:
-        found_api_key = st.secrets.get("GROQ_API_KEY", "")
+        backend_key = st.secrets.get("GROQ_API_KEY", "")
     except Exception:
         pass
-    if not found_api_key:
-        found_api_key = os.environ.get("GROQ_API_KEY", "")
+    if not backend_key:
+        backend_key = os.environ.get("GROQ_API_KEY", "")
 
-    # Always provide an input field for flexibility
-    api_key = st.text_input(
-        "Groq API Key", 
-        value=found_api_key, 
-        type="password",
-        help="Paste your 'gsk_...' key here to use Cloud AI (fast). Leave empty to use Local AI (slow)."
-    )
+    # Use backend key if available, otherwise show input
+    if backend_key:
+        api_key = backend_key
+        st.success("🔒 API Key Securely Loaded")
+        if st.toggle("Override with different key"):
+            api_key = st.text_input("New Groq API Key", type="password")
+    else:
+        api_key = st.text_input(
+            "Groq API Key", 
+            type="password",
+            help="Paste your 'gsk_...' key here to use Cloud AI (fast). Leave empty to use Local AI (slow)."
+        )
 
     if api_key:
         provider = "Groq (Cloud – Free)"
         model_name = "llama-3.3-70b-versatile"
-        st.success("✅ Cloud Mode Active")
+        if not backend_key or st.session_state.get("override_active"):
+             st.success("🚀 Cloud Mode Active")
     else:
         provider = "Ollama (Local)"
         model_name = "llama3:latest"
